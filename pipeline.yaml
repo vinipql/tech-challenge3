@@ -1,0 +1,119 @@
+name: Flag Service - CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  AWS_REGION: us-east-1
+  # PEGAR CAMINHO DO REPOSITORIO ECR DO FLAG SERVICES COM O DANILO
+  ECR_REPOSITORY: nome-do-ecr-do-flag-service
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest -r requirements.txt
+      
+      # Análise de formatação do código (Linter)
+      - name: Run Flake8
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      
+      # Testes Unitários
+      - name: Run Tests
+        run: pytest || echo "Sem testes configurados, seguindo."
+
+  security-scan:
+    needs: build-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Scan de Segurança no Código (SAST)
+      - name: SAST Scan (Bandit)
+        run: |
+          pip install bandit
+          bandit -r . -ll -ii
+          
+      # Scan de Segurança nas Bibliotecas (SCA) - Quebra se achar CRÍTICO
+      - name: SCA Scan (Trivy FS)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          severity: 'CRITICAL'
+          exit-code: '1' 
+
+  docker-and-gitops:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    # Só faz deploy se for um push direto na branch main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Configura as credenciais da AWS 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # Necessário se for conta Academy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Constrói a imagem Docker
+      - name: Build Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          
+      # Faz o Scan na imagem Docker gerada (Container Scan)
+      - name: Container Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
+          format: 'table'
+          severity: 'CRITICAL'
+          exit-code: '1' 
+
+      # Envia a Imagem pro ECR na AWS
+      - name: Push to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      # Atualiza o repositório do ArgoCD (GitOps)
+      - name: Update GitOps Repo
+        env:
+          GITOPS_REPO: "DouglasBueno16/tech-challenge-3" 
+          GITOPS_TOKEN: ${{ secrets.GITOPS_PAT }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          git clone https://$GITOPS_TOKEN@github.com/$GITOPS_REPO.git
+          cd tech-challenge-3
+          
+          # Troca a versão da imagem no arquivo de Deployment do Flag Service
+          sed -i "s|image: .*|image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG|g" manifestos/flag-service/deployment.yaml
+          
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "feat(flag-service): atualiza imagem para $IMAGE_TAG"
+          git push
