@@ -9,7 +9,7 @@ on:
 env:
   AWS_REGION: us-east-1
   # PEGAR CAMINHO DO REPOSITORIO ECR DO FLAG SERVICES COM O DANILO
-  ECR_REPOSITORY: nome-do-ecr-do-flag-service
+  ECR_REPOSITORY: testeflagservice
 
 jobs:
   build-and-lint:
