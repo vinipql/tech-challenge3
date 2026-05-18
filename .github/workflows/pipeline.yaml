@@ -11,11 +11,6 @@ env:
   # PEGAR CAMINHO DO REPOSITORIO ECR DO FLAG SERVICES COM O DANILO
   ECR_REPOSITORY: nome-do-ecr-do-flag-service
 
-# Ajuste do Danilo para a pipeline
-defaults:
-  run:
-    working-directory: ./flag-service
-
 jobs:
   build-and-lint:
     runs-on: ubuntu-latest
