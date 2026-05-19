@@ -17,6 +17,6 @@ spec:
       containers:
       - name: flag-service
         # É ESSA LINHA AQUI QUE O NOSSO ROBÔ VAI ATUALIZAR SOZINHO:
-        image: 515747005528.dkr.ecr.us-east-1.amazonaws.com/testeflagservice:6091cade2857b9a3dccfae98a4bd259867d014cf
+        image: 515747005528.dkr.ecr.us-east-1.amazonaws.com/testeflagservice:cf5b0164fe61525894ad04bd11b616b0b0dbeddf
         ports:
         - containerPort: 5000
