@@ -102,12 +102,12 @@ jobs:
       # Atualiza o repositório do ArgoCD (GitOps)
       - name: Update GitOps Repo
         env:
-          GITOPS_REPO: "DouglasBueno16/tech-challenge-3" 
+          GITOPS_REPO: "vinipql/tech-challenge3" 
           GITOPS_TOKEN: ${{ secrets.GITOPS_PAT }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           git clone https://$GITOPS_TOKEN@github.com/$GITOPS_REPO.git
-          cd tech-challenge-3
+          cd tech-challenge3
           
           # Troca a versão da imagem no arquivo de Deployment do Flag Service
           sed -i "s|image: .*|image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG|g" manifestos/flag-service/deployment.yaml
